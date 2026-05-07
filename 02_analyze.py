@@ -59,7 +59,7 @@ SELECT
     END                             AS tier,
     COUNT(*)                        AS bank_count,
     ROUND(AVG(roa), 4)              AS avg_roa,
-    ROUND(AVG(nim), 4)              AS avg_nim,
+    ROUND(AVG(CAST(nim AS REAL) / NULLIF(asset, 0) * 100), 4) AS avg_nim,
     ROUND(AVG(roe), 4)              AS avg_roe,
     ROUND(
         AVG(CAST(lnlsnet AS REAL) / NULLIF(dep, 0)), 4
@@ -75,7 +75,7 @@ ORDER BY MIN(asset);
 QUERY_YEARLY_TREND = """
 SELECT
     repdte                          AS report_date,
-    ROUND(AVG(nim), 4)              AS avg_nim,
+    ROUND(AVG(CAST(nim AS REAL) / NULLIF(asset, 0) * 100), 4) AS avg_nim,
     ROUND(AVG(roa), 4)              AS avg_roa,
     COUNT(*)                        AS bank_count
 FROM bank_financials
@@ -90,7 +90,7 @@ SELECT
     i.stalp                         AS state,
     COUNT(*)                        AS bank_count,
     ROUND(AVG(f.roa), 4)            AS avg_roa,
-    ROUND(AVG(f.nim), 4)            AS avg_nim
+    ROUND(AVG(CAST(f.nim AS REAL) / NULLIF(f.asset, 0) * 100), 4) AS avg_nim
 FROM bank_financials f
 JOIN institutions i ON f.cert = i.cert
 WHERE f.repdte = '20231231'
@@ -109,7 +109,7 @@ SELECT
     i.stalp                         AS state,
     ROUND(f.asset / 1000.0, 1)      AS assets_millions,
     ROUND(f.roa, 4)                 AS roa,
-    ROUND(f.nim, 4)                 AS nim,
+    ROUND(CAST(f.nim AS REAL) / NULLIF(f.asset, 0) * 100, 4) AS nim,
     ROUND(
         CAST(f.lnlsnet AS REAL) / NULLIF(f.dep, 0), 4
     )                               AS loan_to_deposit
@@ -136,7 +136,7 @@ WITH ranked AS (
             ELSE                          'Large (>$10B)'
         END                                             AS tier,
         ROUND(f.roa, 4)                                 AS roa,
-        ROUND(f.nim, 4)                                 AS nim,
+        ROUND(CAST(f.nim AS REAL) / NULLIF(f.asset, 0) * 100, 4) AS nim,
         RANK() OVER (
             PARTITION BY CASE
                 WHEN f.asset < 100000    THEN 'Community (<$100M)'

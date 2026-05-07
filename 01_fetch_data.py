@@ -8,7 +8,7 @@ SQLite database for analysis.
 Run this first before 02_analyze.py.
 
 Data sources:
-  FDIC BankFind Suite — https://banks.fdic.gov/
+  FDIC BankFind Suite — https://banks.data.fdic.gov/
   No API key required. Public data.
 """
 
@@ -18,7 +18,7 @@ import sqlite3
 import time
 
 DB_PATH = "bank_data.db"
-FDIC_BASE = "https://banks.fdic.gov/api"
+FDIC_BASE = "https://banks.data.fdic.gov/api"
 
 YEARS = [2019, 2020, 2021, 2022, 2023]
 
@@ -47,17 +47,32 @@ INSTITUTION_FIELDS = ",".join([
 ])
 
 
+def fdic_get(url, params, retries=5):
+    """GET with exponential backoff on 429."""
+    for attempt in range(retries):
+        resp = requests.get(url, params=params)
+        if resp.status_code == 429:
+            wait = 2 ** attempt * 2
+            print(f"\n    rate limited, waiting {wait}s...", end="", flush=True)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp
+    resp.raise_for_status()
+    return resp
+
+
 def fetch_financials_for_year(year):
     """Fetch year-end call report financials for all FDIC-insured banks."""
     report_date = f"{year}1231"
     all_records = []
     offset = 0
-    limit = 10000
+    limit = 2000
 
     print(f"  Fetching {year} financials...", end="", flush=True)
 
     while True:
-        resp = requests.get(f"{FDIC_BASE}/financials", params={
+        resp = fdic_get(f"{FDIC_BASE}/financials", params={
             "filters": f"REPDTE:{report_date}",
             "fields": FINANCIAL_FIELDS,
             "limit": limit,
@@ -65,7 +80,6 @@ def fetch_financials_for_year(year):
             "sort_by": "ASSET",
             "sort_order": "DESC",
         })
-        resp.raise_for_status()
         payload = resp.json()
         records = payload.get("data", [])
 
@@ -82,7 +96,7 @@ def fetch_financials_for_year(year):
         if len(records) < limit:
             break
         offset += limit
-        time.sleep(0.2)  # polite pacing
+        time.sleep(0.5)
 
     print(f" {len(all_records):,} records")
     return pd.DataFrame(all_records)
@@ -93,16 +107,15 @@ def fetch_institutions():
     print("  Fetching institution metadata...", end="", flush=True)
     all_records = []
     offset = 0
-    limit = 10000
+    limit = 2000
 
     while True:
-        resp = requests.get(f"{FDIC_BASE}/institutions", params={
+        resp = fdic_get(f"{FDIC_BASE}/institutions", params={
             "filters": "ACTIVE:1",
             "fields": INSTITUTION_FIELDS,
             "limit": limit,
             "offset": offset,
         })
-        resp.raise_for_status()
         payload = resp.json()
         records = payload.get("data", [])
 
@@ -117,7 +130,7 @@ def fetch_institutions():
         if len(records) < limit:
             break
         offset += limit
-        time.sleep(0.2)
+        time.sleep(0.5)
 
     print(f" {len(all_records):,} records")
     return pd.DataFrame(all_records)
